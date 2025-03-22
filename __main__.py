@@ -50,9 +50,21 @@ async def echo_image(update: Update, context: CallbackContext) -> None:
     im_array = result.plot()
     im_rgb = Image.fromarray(im_array[..., ::-1])
 
+    detections = []
+    for box in result.boxes:
+        class_id = int(box.cls[0].item())
+        class_name = model.names[class_id]
+        confidence = round(box.conf[0].item(), 2)
+        detections.append(f"{class_name} ({confidence*100:.0f}%)")
+
+    if detections:
+        detection_message = "Detected objects:\n" + "\n".join(detections)
+    else:
+        detection_message = "No objects detected."
+
     with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as output_file:
         im_rgb.save(output_file.name, format="JPEG", quality=95)
-        await update.message.reply_photo(photo=open(output_file.name, "rb"))
+        await update.message.reply_photo(photo=open(output_file.name, "rb"), caption=detection_message)
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token(TOKEN).build()
