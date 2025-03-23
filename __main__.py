@@ -23,19 +23,40 @@ with open("token.txt", "r", encoding="utf-8") as file:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text="яха баля")
 
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def safe_edit(msg, text):
+    while True:
+        try:
+            await msg.edit_text(text)
+            return
+        except RetryAfter as e:
+            logging.warning(f"Rate limited: retrying in {e.retry_after} seconds")
+            await asyncio.sleep(e.retry_after)
+        except TimedOut:
+            logging.warning("Request timed out. Retrying in 5 seconds...")
+            await asyncio.sleep(5)
 
+async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     content = update.message.text
     response: ChatResponse = chat(
-        model='llama3.2', 
-        messages=[{'role': 'user','content': content}],
-        stream = True
-)
+        model='llama3.2',
+        messages=[{'role': 'user', 'content': content}],
+        stream=True
+    )
     msg = await context.bot.send_message(chat_id=update.effective_chat.id, text='Just a sec… 🚀')
     tmp = ''
+    batch = []
+
     for chunk in response:
-        tmp = tmp + chunk['message']['content']
-        await msg.edit_text(tmp)
+        batch.append(chunk['message']['content'])
+        if len(batch) >= 5:
+            tmp += ''.join(batch)
+            batch = []
+            await safe_edit(msg, tmp)
+            #await asyncio.sleep(1)
+
+    if batch:
+        tmp += ''.join(batch)
+        await safe_edit(msg, tmp)
 
 async def echo_image(update: Update, context: CallbackContext) -> None:
     photo = update.message.photo[-1]
